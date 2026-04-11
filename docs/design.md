@@ -48,12 +48,13 @@ intai-me-k8s/
 │   └── http/
 │       ├── meta-data                # cloud-init metadata (empty)
 │       └── user-data                # cloud-init autoinstall config
-├── kubespray/                       # Git submodule — github.com/kubernetes-sigs/kubespray
 ├── ansible/
+│   ├── requirements.yml             # Kubespray Ansible collection pinned to v2.30.0
 │   ├── inventory/
 │   │   ├── hosts.yml                # Host inventory (EC2 IP or physical server IP)
 │   │   └── k8s-cluster.yml          # Kubespray inventory (VM IPs for cluster formation)
 │   ├── playbook-host.yml            # Configures host: KVM + VM + port forwarding
+│   ├── playbook-k8s.yml             # Imports kubespray collection playbook
 │   └── roles/
 │       ├── kvm_host/
 │       │   └── tasks/main.yml       # Install KVM/QEMU/libvirt, enable services
@@ -119,7 +120,7 @@ intai-me-k8s/
 - Create `.gitignore` (tfstate, .terraform/, .env, .venv/, *.qcow2, output-*)
 - Create `site/index.html` — minimal HTML with full-viewport `<iframe>` rendering `cv.pdf`
 - Place `cv.pdf` directly in `site/`
-- Add `kubespray` as a git submodule: `github.com/kubernetes-sigs/kubespray`
+- Create `ansible/requirements.yml` — Kubespray as Ansible collection pinned to `v2.30.0`
 
 ### Phase 2: Packer — KVM Base Image (`packer/`)
 
@@ -199,6 +200,26 @@ Ansible configures any Linux host (EC2 or physical) to run the KVM VM.
 ### Phase 4: Kubespray — K8s Install & Cluster Formation (post-deploy)
 
 After all hosts are provisioned and VMs are running, Kubespray runs once to install K8s software and form the cluster across all VMs. This is the standard Kubespray workflow — one playbook does everything.
+
+#### Install Kubespray collection
+
+```shell
+ansible-galaxy install -r ansible/requirements.yml
+```
+
+#### `ansible/requirements.yml`
+```yaml
+collections:
+  - name: https://github.com/kubernetes-sigs/kubespray
+    type: git
+    version: v2.30.0
+```
+
+#### `ansible/playbook-k8s.yml`
+```yaml
+- name: Install Kubernetes
+  ansible.builtin.import_playbook: kubernetes_sigs.kubespray.cluster
+```
 
 #### Inventory (`ansible/inventory/k8s-cluster.yml`)
 Generated or maintained manually based on deployed VMs:
@@ -386,7 +407,7 @@ kvm-setup:                          ## Configure host: KVM + VM + port forwardin
 # --- Cluster Formation (run after all hosts are provisioned) ---
 k8s-cluster:                        ## Run Kubespray to install K8s and form cluster across all VMs
 	cd ansible && ansible-playbook -i inventory/k8s-cluster.yml \
-	  ../kubespray/cluster.yml \
+	  playbook-k8s.yml \
 	  -e "auto_renew_certificates=true"
 
 k8s-config:                         ## Fetch kubeconfig from K8s control plane (re-run annually after cert auto-renewal)
@@ -402,8 +423,9 @@ aws-deploy: tf-apply kvm-setup k8s-cluster helm-apply  ## Full AWS deploy (Terra
 deploy: kvm-setup k8s-cluster helm-apply  ## Deploy to physical server (Ansible + Kubespray + Helm only)
 
 # --- Utilities ---
-install:                            ## Install Python dependencies
+install:                            ## Install Python + Ansible dependencies
 	pip install -e .
+	ansible-galaxy install -r ansible/requirements.yml
 
 validate:                           ## Validate Packer + Terraform configs
 	cd packer && packer validate k8s-node.pkr.hcl
@@ -427,7 +449,7 @@ validate:                           ## Validate Packer + Terraform configs
 4. **Port forwarding via iptables**: Host forwards ports 80/443 to the KVM VM's static IP on the libvirt bridge. ingress-nginx runs with `hostNetwork: true` inside K8s to receive traffic directly.
 5. **cert-manager replaces certbot**: In Kubernetes, cert-manager handles Let's Encrypt certificates natively via Ingress annotations — no systemd timers or first-boot scripts.
 6. **Auto-renewing K8s certificates**: Kubespray's `auto_renew_certificates: true` sets up a systemd timer to renew certs before they expire (default 1 year). Re-fetch kubeconfig annually via `make k8s-config`.
-7. **Kubespray as git submodule**: Pinned to a specific release for reproducibility. Avoids vendoring the entire Kubespray repo.
+7. **Kubespray as Ansible Collection**: Installed via `ansible-galaxy` from `ansible/requirements.yml`, pinned to `v2.30.0`. Cleaner than a git submodule — no 50MB+ directory in the repo, standard Ansible dependency management, and the officially recommended approach.
 7. **IMDSv2 enforced**: Prevents SSRF credential theft on the EC2 host.
 8. **SSH for remote access**: Works on both EC2 and physical servers. Key-based auth only. No AWS-specific dependencies (SSM) for host access.
 
