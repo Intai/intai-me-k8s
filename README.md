@@ -36,12 +36,14 @@ Live at https://intai.me/
 4. `make image` to build a KVM base image with Packer, pre-configured with Ubuntu 24.04 and SSH hardening.
 5. `aws configure` to set up AWS credentials for Terraform.
 6. `make aws-deploy` to provision the full stack: Terraform infrastructure (VPC, EC2, Elastic IP, Route 53), KVM guests, WireGuard mesh, Kubernetes cluster via Kubespray, and Helm charts (Traefik, cert-manager, nginx).
+7. `make verify` to verify deployment health across all layers.
 
 ## Bare-Metal Deployment
 
 1. Follow steps 1-4 above.
 2. Fill in `HOST1_IP` and `HOST2_IP` in `.env`, and update `ansible/inventory/hosts.yml` with your server details.
 3. `make deploy` to configure KVM guests, WireGuard mesh, Kubernetes cluster, and Helm charts.
+4. `make verify` to verify deployment health across all layers.
 
 ## Production Considerations
 
