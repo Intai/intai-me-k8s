@@ -1,11 +1,11 @@
-output "instance_id" {
-  value = aws_instance.main.id
+output "instance_ids" {
+  value = aws_instance.main[*].id
 }
 
-output "public_ip" {
-  value = aws_instance.main.public_ip
+output "public_ips" {
+  value = aws_instance.main[*].public_ip
 }
 
-output "elastic_ip" {
-  value = aws_eip.main.public_ip
+output "elastic_ips" {
+  value = aws_eip.main[*].public_ip
 }

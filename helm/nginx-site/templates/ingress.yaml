@@ -4,9 +4,10 @@ metadata:
   name: {{ .Release.Name }}
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
-    nginx.ingress.kubernetes.io/from-to-www-redirect: "true"
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-{{ .Release.Name }}-redirect-www@kubernetescrd
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   tls:
     - hosts:
         - {{ .Values.domain }}
@@ -14,6 +15,16 @@ spec:
       secretName: {{ .Release.Name }}-tls
   rules:
     - host: {{ .Values.domain }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}
+                port:
+                  number: 80
+    - host: www.{{ .Values.domain }}
       http:
         paths:
           - path: /

@@ -1,13 +1,13 @@
-output "instance_id" {
-  value = module.compute.instance_id
+output "instance_ids" {
+  value = module.compute.instance_ids
 }
 
-output "public_ip" {
-  value = module.compute.public_ip
+output "public_ips" {
+  value = module.compute.public_ips
 }
 
-output "elastic_ip" {
-  value = module.compute.elastic_ip
+output "elastic_ips" {
+  value = module.compute.elastic_ips
 }
 
 output "vpc_id" {

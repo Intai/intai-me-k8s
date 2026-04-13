@@ -1,0 +1,15 @@
+network:
+  version: 2
+  ethernets:
+    enp1s0:
+      dhcp4: false
+      addresses: [{{ vm_ip }}/24]
+      routes:
+        - to: default
+          via: {{ vm_gateway }}
+{% for host in groups["hosts"] if hostvars[host].vm_ip != vm_ip %}
+        - to: {{ hostvars[host].vm_ip }}/32
+          via: {{ vm_gateway }}
+{% endfor %}
+      nameservers:
+        addresses: [{{ vm_gateway }}]

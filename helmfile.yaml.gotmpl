@@ -1,37 +1,52 @@
 repositories:
   - name: jetstack
     url: https://charts.jetstack.io
-  - name: ingress-nginx
-    url: https://kubernetes.github.io/ingress-nginx
+  - name: traefik
+    url: https://traefik.github.io/charts
 
 releases:
   - name: cert-manager
     namespace: cert-manager
     createNamespace: true
     chart: jetstack/cert-manager
+    wait: true
     set:
       - name: crds.enabled
         value: "true"
 
-  - name: ingress-nginx
-    namespace: ingress-nginx
+  - name: traefik
+    namespace: traefik
     createNamespace: true
-    chart: ingress-nginx/ingress-nginx
+    chart: traefik/traefik
     wait: true
     needs:
       - cert-manager/cert-manager
-    set:
-      - name: controller.hostNetwork
-        value: "true"
-      - name: controller.dnsPolicy
-        value: ClusterFirstWithHostNet
+    values:
+      - deployment:
+          kind: DaemonSet
+        updateStrategy:
+          rollingUpdate:
+            maxUnavailable: 1
+            maxSurge: 0
+        ports:
+          web:
+            hostPort: 80
+            http:
+              redirections:
+                entryPoint:
+                  to: websecure
+                  scheme: https
+                  permanent: true
+          websecure:
+            hostPort: 443
 
   - name: nginx-site
     chart: ./helm/nginx-site
     disableValidation: true
     wait: true
     needs:
-      - ingress-nginx/ingress-nginx
+      - traefik/traefik
     values:
       - domain: {{ requiredEnv "DOMAIN_NAME" }}
         certEmail: {{ requiredEnv "CERTBOT_EMAIL" }}
+        replicaCount: {{ env "SERVER_COUNT" | default "1" }}

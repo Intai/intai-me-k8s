@@ -27,3 +27,8 @@ variable "vm_disk_gb" {
   type    = number
   default = 30
 }
+
+variable "server_count" {
+  type    = number
+  default = 1
+}

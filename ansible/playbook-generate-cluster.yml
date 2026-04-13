@@ -1,0 +1,6 @@
+- name: Generate Kubespray inventory from host inventory
+  hosts: hosts
+  gather_facts: false
+  connection: local
+  roles:
+    - role: generate_cluster

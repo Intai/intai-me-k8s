@@ -13,7 +13,7 @@ variable "domain_name" {
   type        = string
 }
 
-variable "elastic_ip" {
-  description = "Elastic IP address for the A record"
-  type        = string
+variable "elastic_ips" {
+  description = "Elastic IP addresses for DNS records"
+  type        = list(string)
 }

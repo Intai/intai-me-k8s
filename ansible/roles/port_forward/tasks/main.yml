@@ -6,6 +6,26 @@
     state: present
     reload: true
 
+- name: Allow forwarding from WireGuard to VM network
+  ansible.builtin.iptables:
+    chain: FORWARD
+    action: insert
+    rule_num: "1"
+    in_interface: wg0
+    out_interface: virbr0
+    jump: ACCEPT
+  notify: save iptables
+
+- name: Allow forwarding from VM network to WireGuard
+  ansible.builtin.iptables:
+    chain: FORWARD
+    action: insert
+    rule_num: "1"
+    in_interface: virbr0
+    out_interface: wg0
+    jump: ACCEPT
+  notify: save iptables
+
 - name: DNAT port 80 to VM
   ansible.builtin.iptables:
     table: nat
@@ -39,11 +59,21 @@
     to_destination: "{{ vm_ip }}:6443"
   notify: save iptables
 
-- name: MASQUERADE traffic to virbr0
+- name: Remove old blanket MASQUERADE rule
   ansible.builtin.iptables:
     table: nat
     chain: POSTROUTING
     out_interface: virbr0
+    jump: MASQUERADE
+    state: absent
+  failed_when: false
+
+- name: MASQUERADE DNAT'd traffic to virbr0
+  ansible.builtin.iptables:
+    table: nat
+    chain: POSTROUTING
+    out_interface: virbr0
+    ctstate: DNAT
     jump: MASQUERADE
   notify: save iptables
 

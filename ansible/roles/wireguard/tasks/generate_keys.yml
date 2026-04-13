@@ -1,0 +1,42 @@
+- name: Install WireGuard
+  ansible.builtin.apt:
+    name: wireguard-tools
+    state: present
+    update_cache: true
+
+- name: Check if WireGuard private key exists
+  ansible.builtin.stat:
+    path: /etc/wireguard/privatekey
+  register: wg_key_file
+
+- name: Generate WireGuard private key
+  ansible.builtin.shell: wg genkey > /etc/wireguard/privatekey
+  when: not wg_key_file.stat.exists
+  args:
+    creates: /etc/wireguard/privatekey
+
+- name: Set private key permissions
+  ansible.builtin.file:
+    path: /etc/wireguard/privatekey
+    mode: "0600"
+
+- name: Generate WireGuard public key
+  ansible.builtin.shell: cat /etc/wireguard/privatekey | wg pubkey > /etc/wireguard/publickey
+  when: not wg_key_file.stat.exists
+  args:
+    creates: /etc/wireguard/publickey
+
+- name: Read private key
+  ansible.builtin.slurp:
+    src: /etc/wireguard/privatekey
+  register: wg_private_key_raw
+
+- name: Read public key
+  ansible.builtin.slurp:
+    src: /etc/wireguard/publickey
+  register: wg_public_key_raw
+
+- name: Register WireGuard keys as facts
+  ansible.builtin.set_fact:
+    wg_private_key: "{{ wg_private_key_raw.content | b64decode | trim }}"
+    wg_public_key: "{{ wg_public_key_raw.content | b64decode | trim }}"

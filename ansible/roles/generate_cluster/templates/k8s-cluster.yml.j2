@@ -1,0 +1,46 @@
+# AUTO-GENERATED from hosts.yml — do not edit manually
+all:
+  vars:
+    ansible_user: packer
+    ansible_become: true
+    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+    calico_vxlan_mode: Always
+    calico_ipip_mode: Never
+    calico_backend: vxlan
+    supplementary_addresses_in_ssl_keys:
+{% for host in groups['hosts'] %}
+      - "{{ hostvars[host].ansible_host }}"
+{% endfor %}
+  hosts:
+{% for host in groups['hosts'] %}
+    {{ hostvars[host].node_name }}:
+      ansible_host: "{{ hostvars[host].vm_ip }}"
+      ip: "{{ hostvars[host].vm_ip }}"
+      ansible_ssh_common_args: >-
+        -o ProxyJump={{ hostvars[host].ansible_user }}@{{ hostvars[host].ansible_host }}
+        -o StrictHostKeyChecking=accept-new
+{% endfor %}
+  children:
+    kube_control_plane:
+      hosts:
+{% for host in groups['hosts'] %}
+        {{ hostvars[host].node_name }}: {}
+{% endfor %}
+    kube_node:
+      hosts:
+{% for host in groups['hosts'] %}
+        {{ hostvars[host].node_name }}: {}
+{% endfor %}
+    etcd:
+      hosts:
+{% set etcd_hosts = groups['hosts'] %}
+{% if etcd_hosts | length is divisibleby 2 %}
+{% set etcd_hosts = etcd_hosts[:-1] %}
+{% endif %}
+{% for host in etcd_hosts %}
+        {{ hostvars[host].node_name }}: {}
+{% endfor %}
+    k8s_cluster:
+      children:
+        kube_control_plane: {}
+        kube_node: {}

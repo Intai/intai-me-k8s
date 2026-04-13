@@ -26,16 +26,23 @@ tf-plan: ## Terraform plan
 	  -var "environment=$(ENVIRONMENT)" \
 	  -var "domain_name=$(DOMAIN_NAME)" \
 	  -var "instance_type=$(INSTANCE_TYPE)" \
-	  -var "vm_disk_gb=$(VM_DISK_GB)"
+	  -var "vm_disk_gb=$(VM_DISK_GB)" \
+	  -var "server_count=$(SERVER_COUNT)"
 
-tf-apply: ## Terraform apply — provision AWS
+tf-apply: ## Terraform apply — provision AWS + generate hosts.yml
 	cd terraform && terraform apply -auto-approve \
 	  -var "aws_region=$(AWS_REGION)" \
 	  -var "project_name=$(PROJECT_NAME)" \
 	  -var "environment=$(ENVIRONMENT)" \
 	  -var "domain_name=$(DOMAIN_NAME)" \
 	  -var "instance_type=$(INSTANCE_TYPE)" \
-	  -var "vm_disk_gb=$(VM_DISK_GB)"
+	  -var "vm_disk_gb=$(VM_DISK_GB)" \
+	  -var "server_count=$(SERVER_COUNT)"
+	@echo ""
+	@echo "Configure the nameservers at your domain registrar."
+	@echo "Wait for DNS propagation (may take minutes to hours). Verify with: dig $(DOMAIN_NAME)"
+	@echo ""
+	@read -p "Press Enter to continue..."
 
 tf-destroy: ## Terraform destroy
 	cd terraform && terraform destroy -auto-approve \
@@ -44,28 +51,35 @@ tf-destroy: ## Terraform destroy
 	  -var "environment=$(ENVIRONMENT)" \
 	  -var "domain_name=$(DOMAIN_NAME)" \
 	  -var "instance_type=$(INSTANCE_TYPE)" \
-	  -var "vm_disk_gb=$(VM_DISK_GB)"
+	  -var "vm_disk_gb=$(VM_DISK_GB)" \
+	  -var "server_count=$(SERVER_COUNT)"
 
-kvm-setup: ## Configure host: KVM + VM + port forwarding
+kvm-setup: ## Configure host: KVM + VM + WireGuard + port forwarding
 	cd ansible && ansible-playbook -i inventory/hosts.yml playbook-host.yml \
 	  -e "vm_cpus=$(VM_CPUS)" \
 	  -e "vm_memory_mb=$(VM_MEMORY_MB)" \
 	  $(if $(TAGS),--tags $(TAGS),)
 
-k8s-cluster: ## Run Kubespray to install K8s and form cluster across all VMs
+k8s-inventory: ## Generate k8s-cluster.yml from hosts.yml
+	cd ansible && ansible-playbook -i inventory/hosts.yml playbook-generate-cluster.yml
+
+k8s-cluster: k8s-inventory ## Run Kubespray to install K8s and form cluster across all VMs
 	cd ansible && ansible-playbook -i inventory/k8s-cluster.yml \
 	  playbook-k8s.yml \
 	  -e "auto_renew_certificates=true"
 
 k8s-config: ## Fetch kubeconfig from K8s control plane
-	cd ansible && ansible-playbook -i inventory/hosts.yml playbook-host.yml --tags kubeconfig
+	cd ansible && ansible-playbook -i inventory/hosts.yml playbook-kubeconfig.yml
 
-helm-apply: ## Deploy Helm charts onto K8s
+helm-apply: k8s-config ## Deploy Helm charts onto K8s
 	KUBECONFIG=kubeconfig helmfile apply
 
 deploy: kvm-setup k8s-cluster helm-apply ## Deploy to physical server
 
-aws-deploy: tf-apply kvm-setup k8s-cluster helm-apply ## Full AWS deploy
+aws-deploy: tf-init tf-apply kvm-setup k8s-cluster helm-apply ## Full AWS deploy
+
+verify: ## Verify deployment health across all layers
+	KUBECONFIG=kubeconfig bash scripts/verify.sh
 
 validate: ## Validate Packer + Terraform configs
 	cd packer && packer validate .
@@ -76,4 +90,4 @@ help: ## Show this help
 
 .DEFAULT_GOAL := help
 
-.PHONY: image tf-init tf-plan tf-apply tf-destroy kvm-setup k8s-cluster k8s-config helm-apply aws-deploy deploy install validate help
+.PHONY: image tf-init tf-plan tf-apply tf-destroy kvm-setup k8s-inventory k8s-cluster k8s-config helm-apply aws-deploy deploy install verify validate help

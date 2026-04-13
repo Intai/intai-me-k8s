@@ -1,0 +1,12 @@
+[Interface]
+PrivateKey = {{ wg_private_key }}
+Address = {{ wg_ip }}/24
+ListenPort = {{ wg_port }}
+
+{% for host in groups['hosts'] if host != inventory_hostname %}
+[Peer]
+PublicKey = {{ hostvars[host].wg_public_key }}
+Endpoint = {{ hostvars[host].ansible_host }}:{{ wg_port }}
+AllowedIPs = {{ hostvars[host].wg_ip }}/32, {{ hostvars[host].vm_ip }}/32
+PersistentKeepalive = 25
+{% endfor %}

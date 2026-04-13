@@ -2,13 +2,13 @@
   hosts: all
   gather_facts: false
   connection: local
+  serial: 1
   tasks:
     - name: Remove old host key for VM IP
       ansible.builtin.known_hosts:
         name: "{{ ansible_host }}"
         state: absent
       delegate_to: localhost
-      run_once: true
       vars:
         ansible_become: false
 
