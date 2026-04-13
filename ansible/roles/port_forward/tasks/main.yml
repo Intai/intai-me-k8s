@@ -1,0 +1,115 @@
+- name: Enable IP forwarding
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    sysctl_set: true
+    state: present
+    reload: true
+
+- name: DNAT port 80 to VM
+  ansible.builtin.iptables:
+    table: nat
+    chain: PREROUTING
+    in_interface: "{{ ansible_default_ipv4.interface }}"
+    protocol: tcp
+    destination_port: "80"
+    jump: DNAT
+    to_destination: "{{ vm_ip }}:80"
+  notify: save iptables
+
+- name: DNAT port 443 to VM
+  ansible.builtin.iptables:
+    table: nat
+    chain: PREROUTING
+    in_interface: "{{ ansible_default_ipv4.interface }}"
+    protocol: tcp
+    destination_port: "443"
+    jump: DNAT
+    to_destination: "{{ vm_ip }}:443"
+  notify: save iptables
+
+- name: DNAT port 6443 to VM
+  ansible.builtin.iptables:
+    table: nat
+    chain: PREROUTING
+    in_interface: "{{ ansible_default_ipv4.interface }}"
+    protocol: tcp
+    destination_port: "6443"
+    jump: DNAT
+    to_destination: "{{ vm_ip }}:6443"
+  notify: save iptables
+
+- name: MASQUERADE traffic to virbr0
+  ansible.builtin.iptables:
+    table: nat
+    chain: POSTROUTING
+    out_interface: virbr0
+    jump: MASQUERADE
+  notify: save iptables
+
+- name: Remove existing forward rule for port 80
+  ansible.builtin.iptables:
+    chain: FORWARD
+    protocol: tcp
+    destination: "{{ vm_ip }}"
+    destination_port: "80"
+    jump: ACCEPT
+    state: absent
+  failed_when: false
+
+- name: Allow forwarding to VM port 80
+  ansible.builtin.iptables:
+    chain: FORWARD
+    action: insert
+    rule_num: "1"
+    protocol: tcp
+    destination: "{{ vm_ip }}"
+    destination_port: "80"
+    jump: ACCEPT
+  notify: save iptables
+
+- name: Remove existing forward rule for port 443
+  ansible.builtin.iptables:
+    chain: FORWARD
+    protocol: tcp
+    destination: "{{ vm_ip }}"
+    destination_port: "443"
+    jump: ACCEPT
+    state: absent
+  failed_when: false
+
+- name: Allow forwarding to VM port 443
+  ansible.builtin.iptables:
+    chain: FORWARD
+    action: insert
+    rule_num: "1"
+    protocol: tcp
+    destination: "{{ vm_ip }}"
+    destination_port: "443"
+    jump: ACCEPT
+  notify: save iptables
+
+- name: Remove existing forward rule for port 6443
+  ansible.builtin.iptables:
+    chain: FORWARD
+    protocol: tcp
+    destination: "{{ vm_ip }}"
+    destination_port: "6443"
+    jump: ACCEPT
+    state: absent
+  failed_when: false
+
+- name: Allow forwarding to VM port 6443
+  ansible.builtin.iptables:
+    chain: FORWARD
+    action: insert
+    rule_num: "1"
+    protocol: tcp
+    destination: "{{ vm_ip }}"
+    destination_port: "6443"
+    jump: ACCEPT
+  notify: save iptables
+
+- name: Persist iptables rules
+  ansible.builtin.command: netfilter-persistent save
+  changed_when: true

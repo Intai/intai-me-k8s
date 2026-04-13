@@ -1,0 +1,6 @@
+domain: intai.me
+certEmail: intai.hg@gmail.com
+replicaCount: 1
+image:
+  repository: nginx
+  tag: "1.28-alpine"

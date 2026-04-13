@@ -1,0 +1,2 @@
+- name: save iptables
+  ansible.builtin.command: netfilter-persistent save

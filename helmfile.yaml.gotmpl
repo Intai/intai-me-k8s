@@ -1,0 +1,37 @@
+repositories:
+  - name: jetstack
+    url: https://charts.jetstack.io
+  - name: ingress-nginx
+    url: https://kubernetes.github.io/ingress-nginx
+
+releases:
+  - name: cert-manager
+    namespace: cert-manager
+    createNamespace: true
+    chart: jetstack/cert-manager
+    set:
+      - name: crds.enabled
+        value: "true"
+
+  - name: ingress-nginx
+    namespace: ingress-nginx
+    createNamespace: true
+    chart: ingress-nginx/ingress-nginx
+    wait: true
+    needs:
+      - cert-manager/cert-manager
+    set:
+      - name: controller.hostNetwork
+        value: "true"
+      - name: controller.dnsPolicy
+        value: ClusterFirstWithHostNet
+
+  - name: nginx-site
+    chart: ./helm/nginx-site
+    disableValidation: true
+    wait: true
+    needs:
+      - ingress-nginx/ingress-nginx
+    values:
+      - domain: {{ requiredEnv "DOMAIN_NAME" }}
+        certEmail: {{ requiredEnv "CERTBOT_EMAIL" }}

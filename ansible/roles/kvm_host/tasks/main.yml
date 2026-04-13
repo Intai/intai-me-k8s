@@ -1,0 +1,91 @@
+- name: Install KVM and libvirt packages
+  ansible.builtin.apt:
+    name:
+      - qemu-kvm
+      - libvirt-daemon-system
+      - virtinst
+      - libguestfs-tools
+      - iptables-persistent
+      - fail2ban
+    state: present
+    update_cache: true
+
+- name: Configure fail2ban SSH jail
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.d/sshd.conf
+    content: |
+      [sshd]
+      enabled = true
+      port = ssh
+      filter = sshd
+      maxretry = 5
+      findtime = 600
+      bantime = 3600
+    mode: "0644"
+
+- name: Enable and start fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban
+    enabled: true
+    state: started
+
+- name: Enable and start libvirtd
+  ansible.builtin.systemd:
+    name: libvirtd
+    enabled: true
+    state: started
+
+- name: Detect CPU vendor
+  ansible.builtin.shell: grep -q GenuineIntel /proc/cpuinfo && echo kvm_intel || echo kvm_amd
+  register: cpu_vendor
+  changed_when: false
+
+- name: Set KVM module name
+  ansible.builtin.set_fact:
+    kvm_module: "{{ cpu_vendor.stdout }}"
+
+- name: Check if nested virtualization is already enabled
+  ansible.builtin.slurp:
+    src: "/sys/module/{{ kvm_module }}/parameters/nested"
+  register: nested_param
+  failed_when: false
+
+- name: Reload KVM module with nested virtualization
+  when: nested_param.content is not defined or (nested_param.content | b64decode | trim) not in ['Y', '1']
+  block:
+    - name: Unload KVM module
+      community.general.modprobe:
+        name: "{{ kvm_module }}"
+        state: absent
+
+    - name: Load KVM module with nested=1
+      community.general.modprobe:
+        name: "{{ kvm_module }}"
+        params: nested=1
+        state: present
+
+- name: Persist nested virtualization option
+  ansible.builtin.copy:
+    dest: /etc/modprobe.d/kvm.conf
+    content: "options {{ kvm_module }} nested=1\n"
+    mode: "0644"
+
+- name: Verify nested KVM support
+  ansible.builtin.slurp:
+    src: "/sys/module/{{ kvm_module }}/parameters/nested"
+  register: nested_virt
+
+- name: Fail if nested virtualization is not enabled
+  ansible.builtin.fail:
+    msg: "Nested virtualization is not enabled (got '{{ nested_virt.content | b64decode | trim }}')"
+  when: (nested_virt.content | b64decode | trim) not in ['Y', '1']
+
+- name: Ensure libvirt default network is active
+  ansible.builtin.command: virsh net-start default
+  register: net_start
+  changed_when: "'started' in net_start.stdout"
+  failed_when: false
+
+- name: Ensure libvirt default network is set to autostart
+  ansible.builtin.command: virsh net-autostart default
+  changed_when: false

@@ -1,0 +1,9 @@
+- hosts: hosts
+  become: true
+  roles:
+    - role: kvm_host
+      tags: [kvm]
+    - role: vm_provision
+      tags: [vm]
+    - role: port_forward
+      tags: [port_forward]

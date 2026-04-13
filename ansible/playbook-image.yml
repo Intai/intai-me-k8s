@@ -1,0 +1,5 @@
+- name: Harden VM image
+  hosts: all
+  become: true
+  roles:
+    - image_hardening

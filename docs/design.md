@@ -39,9 +39,6 @@ intai-me-k8s/
 ├── .gitignore
 ├── docs/
 │   └── design.md                   # This file
-├── site/
-│   ├── index.html                  # Landing page with iframe rendering cv.pdf
-│   └── cv.pdf                      # CV document
 ├── packer/
 │   ├── k8s-node.pkr.hcl            # QEMU builder — produces qcow2 image
 │   ├── variables.pkr.hcl
@@ -53,9 +50,12 @@ intai-me-k8s/
 │   ├── inventory/
 │   │   ├── hosts.yml                # Host inventory (EC2 IP or physical server IP)
 │   │   └── k8s-cluster.yml          # Kubespray inventory (VM IPs for cluster formation)
+│   ├── playbook-image.yml           # Packer provisioner: harden VM image
 │   ├── playbook-host.yml            # Configures host: KVM + VM + port forwarding
 │   ├── playbook-k8s.yml             # Imports kubespray collection playbook
 │   └── roles/
+│       ├── image_hardening/
+│       │   └── tasks/main.yml       # fail2ban, SSH hardening, lock packer user
 │       ├── kvm_host/
 │       │   └── tasks/main.yml       # Install KVM/QEMU/libvirt, enable services
 │       ├── vm_provision/
@@ -69,6 +69,9 @@ intai-me-k8s/
 │   └── nginx-site/
 │       ├── Chart.yaml
 │       ├── values.yaml
+│       ├── files/
+│       │   ├── index.html          # Landing page with iframe rendering cv.pdf
+│       │   └── cv.pdf              # CV document
 │       └── templates/
 │           ├── deployment.yaml
 │           ├── service.yaml
@@ -107,24 +110,22 @@ intai-me-k8s/
   ```
   AWS_REGION=ap-southeast-2
   DOMAIN_NAME=intai.me
-  CERTBOT_EMAIL=admin@intai.me
+  CERTBOT_EMAIL=intai.hg@gmail.com
   INSTANCE_TYPE=c8i.large
   PROJECT_NAME=intai-me-k8s
   ENVIRONMENT=production
-  SSH_USERNAME=packer
-  SSH_PASSWORD=packer
   VM_CPUS=1
   VM_MEMORY_MB=2048
   VM_DISK_GB=20
   ```
 - Create `.gitignore` (tfstate, .terraform/, .env, .venv/, *.qcow2, output-*)
-- Create `site/index.html` — minimal HTML with full-viewport `<iframe>` rendering `cv.pdf`
-- Place `cv.pdf` directly in `site/`
+- Create `helm/nginx-site/files/index.html` — minimal HTML with full-viewport `<iframe>` rendering `cv.pdf`
+- Place `cv.pdf` directly in `helm/nginx-site/files/`
 - Create `ansible/requirements.yml` — Kubespray as Ansible collection pinned to `v2.30.0`
 
 ### Phase 2: Packer — KVM Base Image (`packer/`)
 
-Packer uses the QEMU builder to produce a clean Ubuntu qcow2 image. Kubespray handles all K8s prerequisites (swap, kernel modules, sysctl) and installation post-deploy — no shell provisioner needed.
+Packer uses the QEMU builder to produce a hardened Ubuntu qcow2 image. Cloud-init installs the OS with a temporary `packer` user (password auth) so Packer can SSH in during the build. A shell provisioner then locks the image down before finalization. Kubespray handles all K8s prerequisites and installation post-deploy.
 
 - **k8s-node.pkr.hcl**:
   - `source "qemu"` block:
@@ -135,31 +136,30 @@ Packer uses the QEMU builder to produce a clean Ubuntu qcow2 image. Kubespray ha
     - `accelerator`: `kvm` (macOS: `hvf`; CI/Linux: `kvm`)
     - `http_directory`: `http/` (serves cloud-init)
     - `boot_command`: autoinstall kernel params pointing to cloud-init HTTP server
-    - `ssh_username`/`ssh_password`: for Packer provisioner access
+    - `ssh_username`/`ssh_password`: hardcoded `packer`/`packer` for build-time access only
     - `shutdown_command`: `sudo shutdown -P now`
-  - No provisioners — cloud-init handles all OS setup during install
+  - Hardening provisioner — Ansible playbook (`playbook-image.yml`) with `image_hardening` role:
+    1. Installs and configures fail2ban with SSH jail (5 retries / 10 min window / 1 hour ban)
+    2. Disables SSH password authentication (`PasswordAuthentication no`)
+    3. Locks the packer user's password
+    - `NOPASSWD` sudo rule is kept — Kubespray needs it. Removed post-deploy by `playbook-k8s.yml`
+    - SSH keys are injected at deploy time by Ansible's `virt-customize`, not baked into the image
   - Output: `output-k8s-node/k8s-node.qcow2`
 
-- **variables.pkr.hcl**: `ubuntu_iso_url`, `ubuntu_iso_checksum`, `disk_size`, `ssh_username`, `ssh_password`
+- **variables.pkr.hcl**: `ubuntu_iso_url`, `ubuntu_iso_checksum`, `disk_size`
 
-- **http/user-data**: cloud-init autoinstall config — sets up SSH user, enables password auth for Packer, minimal packages
+- **http/user-data**: cloud-init autoinstall config — sets up SSH user with password auth for Packer build-time access (disabled in final image by provisioner)
 
 ### Phase 3: Ansible — Host Configuration (`ansible/`)
 
 Ansible configures any Linux host (EC2 or physical) to run the KVM VM.
 
 #### Role: `kvm_host`
-1. Install packages: `qemu-kvm`, `libvirt-daemon-system`, `virtinst`, `libguestfs-tools`, `iptables-persistent`
-2. Enable and start `libvirtd` service
-3. Verify nested KVM support: check `/sys/module/kvm_intel/parameters/nested` is `Y`
-4. Ensure libvirt default network (virbr0, 192.168.122.0/24) is active
-5. Rate limiting on SSH (22) and K8s API (6443) — drop IPs with more than 5 new connections per 60 seconds:
-   ```
-   iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --name ssh --set
-   iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --name ssh --update --seconds 60 --hitcount 5 -j DROP
-   iptables -A INPUT -p tcp --dport 6443 -m conntrack --ctstate NEW -m recent --name k8sapi --set
-   iptables -A INPUT -p tcp --dport 6443 -m conntrack --ctstate NEW -m recent --name k8sapi --update --seconds 60 --hitcount 5 -j DROP
-   ```
+1. Install packages: `qemu-kvm`, `libvirt-daemon-system`, `virtinst`, `libguestfs-tools`, `iptables-persistent`, `fail2ban`
+2. Configure and enable fail2ban with SSH jail (5 retries / 10 min window / 1 hour ban)
+3. Enable and start `libvirtd` service
+4. Detect CPU vendor (Intel/AMD), enable nested KVM if not already active
+5. Ensure libvirt default network (virbr0, 192.168.122.0/24) is active
 
 #### Role: `vm_provision`
 1. Copy Packer-built qcow2 image to `/var/lib/libvirt/images/k8s-node.qcow2`
@@ -219,6 +219,15 @@ collections:
 ```yaml
 - name: Install Kubernetes
   ansible.builtin.import_playbook: kubernetes_sigs.kubespray.cluster
+
+- name: Remove passwordless sudo from packer user
+  hosts: all
+  become: true
+  tasks:
+    - name: Remove packer sudoers rule
+      ansible.builtin.file:
+        path: /etc/sudoers.d/packer
+        state: absent
 ```
 
 #### Inventory (`ansible/inventory/k8s-cluster.yml`)
@@ -265,7 +274,7 @@ all:
 - **values.yaml**:
   ```yaml
   domain: intai.me
-  certEmail: admin@intai.me
+  certEmail: intai.hg@gmail.com
   replicaCount: 1
   image:
     repository: nginx
@@ -333,7 +342,7 @@ The `needs:` directive ensures ordering: cert-manager CRDs exist before nginx-si
 2. `helmfile apply` — installs/upgrades all releases in dependency order
 
 #### GitHub Actions (`.github/workflows/deploy-apps.yml`) — CI/CD on push
-- Triggers on push to `main` (changes to `helm/`, `site/`, or `helmfile.yaml`)
+- Triggers on push to `main` (changes to `helm/` or `helmfile.yaml`)
 - Sets up kubectl/helm/helmfile with kubeconfig from GitHub Secrets (`KUBECONFIG_B64` — base64-encoded)
 - Connects directly to K8s API at `https://<EIP>:6443` (client cert auth, same as managed K8s)
 - No SSH access needed — more secure than giving CI shell access to the server
@@ -382,10 +391,7 @@ export
 
 # --- Image ---
 image:                              ## Build KVM base image with Packer
-	cd packer && packer build \
-	  -var "ssh_username=$(SSH_USERNAME)" \
-	  -var "ssh_password=$(SSH_PASSWORD)" \
-	  k8s-node.pkr.hcl
+	cd packer && packer build k8s-node.pkr.hcl
 
 # --- AWS Infrastructure (skip for physical servers) ---
 tf-init:                            ## Terraform init
@@ -445,13 +451,13 @@ validate:                           ## Validate Packer + Terraform configs
 
 1. **No AMI — portable to physical servers**: Packer builds a qcow2 KVM image, not an AWS AMI. The same image runs on EC2 or any Linux server with KVM. Terraform is AWS-only; Ansible handles everything else.
 2. **Kubespray does everything post-deploy**: Packer builds a clean Ubuntu image with OS prerequisites only. Kubespray handles full K8s install + cluster formation in one run — the standard workflow. Same image works for single-node or multi-node, just change the inventory.
-3. **KVM on c8i.large (nested virtualization)**: 8th-gen Intel EC2 instances expose the `vmx` CPU flag, enabling KVM inside EC2 without expensive bare-metal instances.
+3. **KVM on c8i.large (nested virtualization)**: 8th-gen Intel EC2 instances support nested virtualization via `cpu_options { nested_virtualization = "enabled" }`, exposing the `vmx` CPU flag to enable KVM inside EC2 without expensive bare-metal instances.
 4. **Port forwarding via iptables**: Host forwards ports 80/443 to the KVM VM's static IP on the libvirt bridge. ingress-nginx runs with `hostNetwork: true` inside K8s to receive traffic directly.
 5. **cert-manager replaces certbot**: In Kubernetes, cert-manager handles Let's Encrypt certificates natively via Ingress annotations — no systemd timers or first-boot scripts.
 6. **Auto-renewing K8s certificates**: Kubespray's `auto_renew_certificates: true` sets up a systemd timer to renew certs before they expire (default 1 year). Re-fetch kubeconfig annually via `make k8s-config`.
 7. **Kubespray as Ansible Collection**: Installed via `ansible-galaxy` from `ansible/requirements.yml`, pinned to `v2.30.0`. Cleaner than a git submodule — no 50MB+ directory in the repo, standard Ansible dependency management, and the officially recommended approach.
 7. **IMDSv2 enforced**: Prevents SSRF credential theft on the EC2 host.
-8. **SSH for remote access**: Works on both EC2 and physical servers. Key-based auth only. No AWS-specific dependencies (SSM) for host access.
+8. **SSH for remote access**: Works on both EC2 and physical servers. Key-based auth only — Packer's hardening provisioner disables password auth and locks the build-time password in the final image. SSH keys are injected at deploy time by Ansible's `virt-customize`, not baked into the image. Passwordless sudo is removed after Kubespray completes. No AWS-specific dependencies (SSM) for host access.
 
 ## Verification
 

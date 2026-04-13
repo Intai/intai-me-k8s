@@ -1,0 +1,133 @@
+- name: Copy qcow2 image to libvirt images directory
+  ansible.builtin.copy:
+    src: "{{ vm_image_src }}"
+    dest: "{{ vm_image_dest }}"
+    remote_src: false
+    mode: "0644"
+
+- name: Set static IP via virt-customize
+  ansible.builtin.command: >
+    virt-customize -a {{ vm_image_dest }}
+    --write /etc/netplan/99-static.yaml:'network:
+      version: 2
+      ethernets:
+        enp1s0:
+          dhcp4: false
+          addresses: [{{ vm_ip }}/24]
+          routes:
+            - to: default
+              via: {{ vm_gateway }}
+          nameservers:
+            addresses: [{{ vm_gateway }}]'
+  changed_when: true
+
+- name: Inject SSH public key into VM
+  ansible.builtin.command: >
+    virt-customize -a {{ vm_image_dest }}
+    --ssh-inject "packer:string:{{ lookup('file', ssh_public_key_file) }}"
+  changed_when: true
+
+- name: Template VM domain XML
+  ansible.builtin.template:
+    src: vm-domain.xml.j2
+    dest: /tmp/{{ vm_name }}-domain.xml
+    mode: "0644"
+
+- name: Check if VM is already defined
+  ansible.builtin.command: virsh dominfo {{ vm_name }}
+  register: vm_info
+  changed_when: false
+  failed_when: false
+
+- name: Destroy existing VM
+  ansible.builtin.command: virsh destroy {{ vm_name }}
+  when: vm_info.rc == 0
+  changed_when: true
+  failed_when: false
+
+- name: Undefine existing VM
+  ansible.builtin.command: virsh undefine {{ vm_name }}
+  when: vm_info.rc == 0
+  changed_when: true
+
+- name: Define VM from XML
+  ansible.builtin.command: virsh define /tmp/{{ vm_name }}-domain.xml
+
+- name: Start VM
+  ansible.builtin.command: virsh start {{ vm_name }}
+  register: vm_start
+  changed_when: "'started' in vm_start.stdout"
+  failed_when: false
+
+- name: Enable VM autostart
+  ansible.builtin.command: virsh autostart {{ vm_name }}
+  changed_when: true
+
+- name: Wait for VM SSH to become available
+  ansible.builtin.wait_for:
+    host: "{{ vm_ip }}"
+    port: 22
+    timeout: 120
+    delay: 10
+
+- name: Add VM to in-memory inventory
+  tags: [kubeconfig]
+  ansible.builtin.add_host:
+    name: node1
+    ansible_host: "{{ vm_ip }}"
+    ansible_user: packer
+    ansible_ssh_private_key_file: "{{ ssh_public_key_file | regex_replace('\\.pub$', '') }}"
+    groups:
+      - k8s_nodes
+
+- name: Fetch kubeconfig from control plane
+  tags: [kubeconfig, never]
+  block:
+    - name: Copy admin.conf from VM
+      ansible.builtin.fetch:
+        src: /etc/kubernetes/admin.conf
+        dest: "{{ playbook_dir }}/../kubeconfig"
+        flat: true
+      delegate_to: node1
+      become: true
+      vars:
+        ansible_ssh_common_args: "-o ProxyJump={{ hostvars['server1']['ansible_user'] }}@{{ hostvars['server1']['ansible_host'] }}"
+        ansible_become_flags: "-n"
+
+    - name: Rewrite kubeconfig server URL to public IP
+      ansible.builtin.replace:
+        path: "{{ playbook_dir }}/../kubeconfig"
+        regexp: 'server: https://.*:6443'
+        replace: "server: https://{{ ansible_host }}:6443"
+      delegate_to: localhost
+      become: false
+
+    - name: Rename entries in fetched kubeconfig
+      ansible.builtin.replace:
+        path: "{{ playbook_dir }}/../kubeconfig"
+        regexp: "{{ item.from }}"
+        replace: "{{ item.to }}"
+      loop:
+        - { from: 'kubernetes-admin@cluster.local', to: 'intai-me-k8s' }
+        - { from: 'cluster.local', to: 'intai-me-k8s' }
+        - { from: 'kubernetes-admin', to: 'intai-me-k8s-admin' }
+      delegate_to: localhost
+      become: false
+
+    - name: Back up existing kubeconfig
+      ansible.builtin.copy:
+        src: "{{ lookup('env', 'HOME') }}/.kube/config"
+        dest: "{{ lookup('env', 'HOME') }}/.kube/config.bak"
+        remote_src: true
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+
+    - name: Merge kubeconfig into ~/.kube/config
+      ansible.builtin.shell:
+        cmd: >
+          KUBECONFIG={{ playbook_dir }}/../kubeconfig:{{ lookup('env', 'HOME') }}/.kube/config
+          kubectl config view --flatten > {{ lookup('env', 'HOME') }}/.kube/config.merged
+          && mv {{ lookup('env', 'HOME') }}/.kube/config.merged {{ lookup('env', 'HOME') }}/.kube/config
+      delegate_to: localhost
+      become: false

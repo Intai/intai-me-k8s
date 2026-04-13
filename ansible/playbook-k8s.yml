@@ -1,0 +1,17 @@
+- name: Clear stale VM host keys from local known_hosts
+  hosts: all
+  gather_facts: false
+  connection: local
+  tasks:
+    - name: Remove old host key for VM IP
+      ansible.builtin.known_hosts:
+        name: "{{ ansible_host }}"
+        state: absent
+      delegate_to: localhost
+      run_once: true
+      vars:
+        ansible_become: false
+
+- name: Install Kubernetes
+  ansible.builtin.import_playbook: kubernetes_sigs.kubespray.cluster
+

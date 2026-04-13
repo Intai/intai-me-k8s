@@ -1,0 +1,28 @@
+all:
+  vars:
+    ansible_user: packer
+    ansible_become: true
+    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+    ansible_ssh_common_args: >-
+      -o ProxyJump=ubuntu@{{ lookup('env', 'HOST_IP') }}
+      -o StrictHostKeyChecking=accept-new
+    supplementary_addresses_in_ssl_keys:
+      - "{{ lookup('env', 'HOST_IP') }}"
+  hosts:
+    node1:
+      ansible_host: 192.168.122.10
+      ip: 192.168.122.10
+  children:
+    kube_control_plane:
+      hosts:
+        node1: {}
+    kube_node:
+      hosts:
+        node1: {}
+    etcd:
+      hosts:
+        node1: {}
+    k8s_cluster:
+      children:
+        kube_control_plane: {}
+        kube_node: {}
