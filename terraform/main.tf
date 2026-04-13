@@ -4,6 +4,7 @@ module "vpc" {
   project_name = var.project_name
   environment  = var.environment
   aws_region   = var.aws_region
+  aws_az_count = var.aws_az_count
 }
 
 module "security" {

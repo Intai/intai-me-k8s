@@ -16,28 +16,24 @@ image: ## Build KVM base image with Packer
 	  -var "qemu_accelerator=$(QEMU_ACCELERATOR)" \
 	  .
 
+TF_VARS := \
+  -var "aws_region=$(AWS_REGION)" \
+  -var "aws_az_count=$(AWS_AZ_COUNT)" \
+  -var "project_name=$(PROJECT_NAME)" \
+  -var "environment=$(ENVIRONMENT)" \
+  -var "domain_name=$(DOMAIN_NAME)" \
+  -var "instance_type=$(INSTANCE_TYPE)" \
+  -var "vm_disk_gb=$(VM_DISK_GB)" \
+  -var "server_count=$(SERVER_COUNT)"
+
 tf-init: ## Terraform init
 	cd terraform && terraform init
 
 tf-plan: ## Terraform plan
-	cd terraform && terraform plan \
-	  -var "aws_region=$(AWS_REGION)" \
-	  -var "project_name=$(PROJECT_NAME)" \
-	  -var "environment=$(ENVIRONMENT)" \
-	  -var "domain_name=$(DOMAIN_NAME)" \
-	  -var "instance_type=$(INSTANCE_TYPE)" \
-	  -var "vm_disk_gb=$(VM_DISK_GB)" \
-	  -var "server_count=$(SERVER_COUNT)"
+	cd terraform && terraform plan $(TF_VARS)
 
 tf-apply: ## Terraform apply — provision AWS + generate hosts.yml
-	cd terraform && terraform apply -auto-approve \
-	  -var "aws_region=$(AWS_REGION)" \
-	  -var "project_name=$(PROJECT_NAME)" \
-	  -var "environment=$(ENVIRONMENT)" \
-	  -var "domain_name=$(DOMAIN_NAME)" \
-	  -var "instance_type=$(INSTANCE_TYPE)" \
-	  -var "vm_disk_gb=$(VM_DISK_GB)" \
-	  -var "server_count=$(SERVER_COUNT)"
+	cd terraform && terraform apply -auto-approve $(TF_VARS)
 	@echo ""
 	@echo "Configure the nameservers at your domain registrar."
 	@echo "Wait for DNS propagation (may take minutes to hours). Verify with: dig $(DOMAIN_NAME)"
@@ -45,14 +41,7 @@ tf-apply: ## Terraform apply — provision AWS + generate hosts.yml
 	@read -p "Press Enter to continue..."
 
 tf-destroy: ## Terraform destroy
-	cd terraform && terraform destroy -auto-approve \
-	  -var "aws_region=$(AWS_REGION)" \
-	  -var "project_name=$(PROJECT_NAME)" \
-	  -var "environment=$(ENVIRONMENT)" \
-	  -var "domain_name=$(DOMAIN_NAME)" \
-	  -var "instance_type=$(INSTANCE_TYPE)" \
-	  -var "vm_disk_gb=$(VM_DISK_GB)" \
-	  -var "server_count=$(SERVER_COUNT)"
+	cd terraform && terraform destroy -auto-approve $(TF_VARS)
 
 kvm-setup: ## Configure host: KVM + VM + WireGuard + port forwarding
 	cd ansible && ansible-playbook -i inventory/hosts.yml playbook-host.yml \

@@ -22,26 +22,16 @@ resource "aws_internet_gateway" "main" {
   }
 }
 
-resource "aws_subnet" "public_1" {
+resource "aws_subnet" "public" {
+  count = var.aws_az_count
+
   vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.1.0/24"
-  availability_zone       = data.aws_availability_zones.available.names[0]
+  cidr_block              = cidrsubnet(aws_vpc.main.cidr_block, 8, count.index + 1)
+  availability_zone       = data.aws_availability_zones.available.names[count.index]
   map_public_ip_on_launch = true
 
   tags = {
-    Name        = "${var.project_name}-public-1"
-    Environment = var.environment
-  }
-}
-
-resource "aws_subnet" "public_2" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.2.0/24"
-  availability_zone       = data.aws_availability_zones.available.names[1]
-  map_public_ip_on_launch = true
-
-  tags = {
-    Name        = "${var.project_name}-public-2"
+    Name        = "${var.project_name}-public-${count.index + 1}"
     Environment = var.environment
   }
 }
@@ -60,12 +50,9 @@ resource "aws_route_table" "public" {
   }
 }
 
-resource "aws_route_table_association" "public_1" {
-  subnet_id      = aws_subnet.public_1.id
-  route_table_id = aws_route_table.public.id
-}
+resource "aws_route_table_association" "public" {
+  count = var.aws_az_count
 
-resource "aws_route_table_association" "public_2" {
-  subnet_id      = aws_subnet.public_2.id
+  subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
 }

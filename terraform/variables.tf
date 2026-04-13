@@ -3,6 +3,12 @@ variable "aws_region" {
   default = "ap-southeast-2"
 }
 
+variable "aws_az_count" {
+  description = "Number of availability zones / public subnets to create"
+  type        = number
+  default     = 2
+}
+
 variable "project_name" {
   type    = string
   default = "intai-me-k8s"

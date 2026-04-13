@@ -18,6 +18,7 @@ Live at https://intai.me/
    | Variable | Description |
    |---|---|
    | `AWS_REGION` | AWS region to deploy in |
+   | `AWS_AZ_COUNT` | Number of AWS availability zones to spread subnets across |
    | `DOMAIN_NAME` | Domain name for the web server |
    | `CERTBOT_EMAIL` | Email for Let's Encrypt certificate notifications |
    | `INSTANCE_TYPE` | EC2 instance type with nested virtualization (e.g. `c8i.large`) |
