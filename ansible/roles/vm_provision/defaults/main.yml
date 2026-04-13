@@ -1,5 +1,5 @@
-vm_cpus: 1
-vm_memory_mb: 2048
+vm_cpus: 2
+vm_memory_mb: 3072
 vm_name: "{{ node_name | default('k8s-node') }}"
 vm_gateway: 192.168.122.1
 vm_image_src: "{{ playbook_dir }}/../packer/output-k8s-node/k8s-node.qcow2"

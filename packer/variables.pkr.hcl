@@ -10,12 +10,12 @@ variable "ubuntu_iso_checksum" {
 
 variable "vm_cpus" {
   type    = number
-  default = 1
+  default = 2
 }
 
 variable "vm_memory_mb" {
   type    = number
-  default = 2048
+  default = 3072
 }
 
 variable "disk_size" {

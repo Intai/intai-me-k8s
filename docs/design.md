@@ -180,8 +180,8 @@ Ansible configures any Linux host (EC2 or physical) to run a KVM VM. The playboo
 2. Use `virt-customize` to inject SSH key and set static IP (from `vm_ip` host var) via cloud-init/netplan
 3. Define VM from `vm-domain.xml.j2` template via `virsh define`:
    - VM name and disk path derived from `node_name` host var
-   - vCPUs: `{{ vm_cpus }}` (default: 1)
-   - Memory: `{{ vm_memory_mb }}` MB (default: 2048)
+   - vCPUs: `{{ vm_cpus }}` (default: 2)
+   - Memory: `{{ vm_memory_mb }}` MB (default: 3072)
    - Network: libvirt default (virbr0)
 4. Start VM via `virsh start`, wait for SSH to become available
 5. Add VM to in-memory Ansible inventory using `node_name`
