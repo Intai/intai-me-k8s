@@ -43,10 +43,11 @@ tf-apply: ## Terraform apply — provision AWS + generate hosts.yml
 tf-destroy: ## Terraform destroy
 	cd terraform && terraform destroy -auto-approve $(TF_VARS)
 
-kvm-setup: ## Configure host: KVM + VM + WireGuard + port forwarding
+kvm-setup: ## Configure host (RECREATE_VM=true to recreate VMs, TAGS=kvm|vm|wireguard|port_forward)
 	cd ansible && ansible-playbook -i inventory/hosts.yml playbook-host.yml \
 	  -e "vm_cpus=$(VM_CPUS)" \
 	  -e "vm_memory_mb=$(VM_MEMORY_MB)" \
+	  $(if $(RECREATE_VM),-e "vm_recreate=$(RECREATE_VM)",) \
 	  $(if $(TAGS),--tags $(TAGS),)
 
 k8s-inventory: ## Generate k8s-cluster.yml from hosts.yml
