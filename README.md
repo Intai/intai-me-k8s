@@ -41,7 +41,7 @@ Live at https://intai.me/
 
 ### Scale Up
 
-1. Increase `SERVER_COUNT` in `.env` (e.g. 3 → 5).
+1. Increase `SERVER_COUNT` and `AWS_AZ_COUNT` in `.env` (e.g. 3 → 5).
 2. `make aws-deploy` to provision new nodes and join them to the cluster (existing nodes are untouched).
 
 ### Scale Down
