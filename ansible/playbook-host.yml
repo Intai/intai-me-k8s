@@ -1,3 +1,14 @@
+- name: Clear old SSH host keys when recreating VMs
+  hosts: hosts
+  gather_facts: false
+  tasks:
+    - name: Remove stale host key
+      delegate_to: localhost
+      ansible.builtin.command: ssh-keygen -R {{ ansible_host }}
+      changed_when: true
+      failed_when: false
+      when: vm_recreate | default(false) | bool
+
 - name: Set up KVM and provision VMs
   hosts: hosts
   become: true

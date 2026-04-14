@@ -17,8 +17,8 @@ all:
       ansible_host: "{{ hostvars[host].vm_ip }}"
       ip: "{{ hostvars[host].vm_ip }}"
       ansible_ssh_common_args: >-
-        -o ProxyJump={{ hostvars[host].ansible_user }}@{{ hostvars[host].ansible_host }}
         -o StrictHostKeyChecking=accept-new
+        -o ProxyCommand="ssh -o StrictHostKeyChecking=accept-new -W %h:%p {{ hostvars[host].ansible_user }}@{{ hostvars[host].ansible_host }}"
 {% endfor %}
   children:
     kube_control_plane:

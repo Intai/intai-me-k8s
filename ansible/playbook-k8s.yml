@@ -6,7 +6,7 @@
   tasks:
     - name: Extract jump host from ProxyJump config
       ansible.builtin.set_fact:
-        jump_host: "{{ ansible_ssh_common_args | regex_search('ProxyJump=\\S+@(\\S+)', '\\1') | first }}"
+        jump_host: "{{ ansible_ssh_common_args | regex_search('-W %h:%p \\S+@(\\S+)', '\\1') | first }}"
       vars:
         ansible_become: false
 
