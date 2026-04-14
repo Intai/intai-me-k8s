@@ -15,7 +15,7 @@ variable "vm_cpus" {
 
 variable "vm_memory_mb" {
   type    = number
-  default = 3072
+  default = 2560
 }
 
 variable "disk_size" {

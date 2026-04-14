@@ -43,6 +43,12 @@
         dest: /tmp/{{ vm_name }}-domain.xml
         mode: "0644"
 
+    - name: Clear old SSH host key for recreated VM
+      delegate_to: localhost
+      ansible.builtin.command: ssh-keygen -R {{ vm_ip }}
+      changed_when: true
+      failed_when: false
+
     - name: Destroy existing VM
       ansible.builtin.command: virsh destroy {{ vm_name }}
       when: vm_info.rc == 0
