@@ -39,6 +39,17 @@ Live at https://intai.me/
 6. `make aws-deploy` to provision the full stack: Terraform infrastructure (VPC, EC2, Elastic IP, Route 53), KVM guests, WireGuard mesh, Kubernetes cluster via Kubespray, and Helm charts (Traefik, cert-manager, nginx).
 7. `make verify` to verify deployment health across all layers.
 
+### Scale Up
+
+1. Increase `SERVER_COUNT` in `.env` (e.g. 3 → 5).
+2. `make aws-deploy` to provision new nodes and join them to the cluster (existing nodes are untouched).
+
+### Scale Down
+
+1. `make k8s-remove-node NODE=node3` to drain workloads and remove the node from K8s/etcd.
+2. Decrease `SERVER_COUNT` in `.env` (e.g. 3 → 2).
+3. `make aws-deploy` to destroy the removed EC2 instance and re-sync the cluster.
+
 ## Bare-Metal Deployment
 
 1. Follow steps 1-4 above.

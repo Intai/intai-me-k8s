@@ -58,6 +58,12 @@ k8s-cluster: k8s-inventory ## Run Kubespray to install K8s and form cluster acro
 	  playbook-k8s.yml \
 	  -e "auto_renew_certificates=true"
 
+k8s-remove-node: k8s-inventory ## Remove node from K8s/etcd cluster (NODE=node3)
+	cd ansible && ansible-playbook -i inventory/k8s-cluster.yml \
+	  playbook-remove-node.yml \
+	  -e "node=$(NODE)" \
+	  -e "skip_confirmation=true"
+
 k8s-config: ## Fetch kubeconfig from K8s control plane
 	cd ansible && ansible-playbook -i inventory/hosts.yml playbook-kubeconfig.yml
 
@@ -80,4 +86,4 @@ help: ## Show this help
 
 .DEFAULT_GOAL := help
 
-.PHONY: image tf-init tf-plan tf-apply tf-destroy kvm-setup k8s-inventory k8s-cluster k8s-config helm-apply aws-deploy deploy install verify validate help
+.PHONY: image tf-init tf-plan tf-apply tf-destroy kvm-setup k8s-inventory k8s-cluster k8s-remove-node k8s-config helm-apply aws-deploy deploy install verify validate help
