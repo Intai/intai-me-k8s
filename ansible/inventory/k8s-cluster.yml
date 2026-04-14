@@ -14,14 +14,14 @@ all:
       ansible_host: "192.168.122.10"
       ip: "192.168.122.10"
       ansible_ssh_common_args: >-
-        -o ProxyJump=ubuntu@{{ lookup('env', 'HOST1_IP') }}
         -o StrictHostKeyChecking=accept-new
+        -o ProxyCommand="ssh -o StrictHostKeyChecking=accept-new -W %h:%p ubuntu@{{ lookup('env', 'HOST1_IP') }}"
     # node2:
     #   ansible_host: "192.168.122.11"
     #   ip: "192.168.122.11"
     #   ansible_ssh_common_args: >-
-    #     -o ProxyJump=ubuntu@{{ lookup('env', 'HOST2_IP') }}
     #     -o StrictHostKeyChecking=accept-new
+    #     -o ProxyCommand="ssh -o StrictHostKeyChecking=accept-new -W %h:%p ubuntu@{{ lookup('env', 'HOST2_IP') }}"
   children:
     kube_control_plane:
       hosts:

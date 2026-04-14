@@ -38,9 +38,11 @@ releases:
     chart: ./helm/nginx-site
     disableValidation: true
     wait: true
+    timeout: 600
     needs:
       - traefik/traefik
     values:
       - domain: {{ requiredEnv "DOMAIN_NAME" }}
         certEmail: {{ requiredEnv "CERTBOT_EMAIL" }}
         replicaCount: {{ env "SERVER_COUNT" | default "1" }}
+        environment: {{ env "ENVIRONMENT" | default "production" }}

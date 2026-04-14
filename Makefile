@@ -70,6 +70,9 @@ k8s-config: ## Fetch kubeconfig from K8s control plane
 helm-apply: k8s-config ## Deploy Helm charts onto K8s
 	KUBECONFIG=kubeconfig helmfile apply
 
+helm-sync: k8s-config ## Force re-deploy all Helm charts onto K8s
+	KUBECONFIG=kubeconfig helmfile sync
+
 deploy: kvm-setup k8s-cluster helm-apply ## Deploy to physical server
 
 aws-deploy: tf-init tf-apply kvm-setup k8s-cluster helm-apply ## Full AWS deploy
@@ -86,4 +89,4 @@ help: ## Show this help
 
 .DEFAULT_GOAL := help
 
-.PHONY: image tf-init tf-plan tf-apply tf-destroy kvm-setup k8s-inventory k8s-cluster k8s-remove-node k8s-config helm-apply aws-deploy deploy install verify validate help
+.PHONY: image tf-init tf-plan tf-apply tf-destroy kvm-setup k8s-inventory k8s-cluster k8s-remove-node k8s-config helm-apply helm-sync aws-deploy deploy install verify validate help
